@@ -1,0 +1,774 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Lookback — LSTM / GRU stock predictor</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Fraunces:ital,opsz,wght@0,9..144,400;0,9..144,500;0,9..144,600;1,9..144,500&family=IBM+Plex+Sans:wght@400;500;600&family=IBM+Plex+Mono:wght@400;500;600&display=swap" rel="stylesheet">
+<script src="https://cdnjs.cloudflare.com/ajax/libs/tensorflow/4.15.0/tf.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.4/chart.umd.min.js"></script>
+<style>
+  :root{
+    --ink:#0D1117;
+    --panel:#141B26;
+    --panel-2:#182130;
+    --line:#2A3441;
+    --line-soft:#1F2836;
+    --gold:#C9A227;
+    --gold-dim:#8A7530;
+    --up:#4FA97E;
+    --down:#C15C4A;
+    --text:#E7E3D8;
+    --text-dim:#8B95A6;
+    --text-faint:#576172;
+    --radius:3px;
+  }
+  *{box-sizing:border-box;}
+  html,body{margin:0;padding:0;}
+  body{
+    background:var(--ink);
+    color:var(--text);
+    font-family:'IBM Plex Sans', sans-serif;
+    line-height:1.5;
+    -webkit-font-smoothing:antialiased;
+  }
+  a{color:var(--gold);}
+  ::selection{background:var(--gold-dim); color:#0D1117;}
+  :focus-visible{outline:2px solid var(--gold); outline-offset:2px;}
+
+  .mono{font-family:'IBM Plex Mono', monospace;}
+
+  /* ---------- Ticker ---------- */
+  .ticker-wrap{
+    background:#090D13;
+    border-bottom:1px solid var(--line);
+    overflow:hidden;
+    white-space:nowrap;
+    position:relative;
+    height:34px;
+  }
+  .ticker-track{
+    display:inline-flex;
+    align-items:center;
+    height:34px;
+    animation:scroll 28s linear infinite;
+    will-change:transform;
+  }
+  @keyframes scroll{
+    from{transform:translateX(0);}
+    to{transform:translateX(-50%);}
+  }
+  @media (prefers-reduced-motion: reduce){
+    .ticker-track{animation:none;}
+  }
+  .tick{
+    display:inline-flex;
+    gap:.5em;
+    align-items:baseline;
+    padding:0 1.4rem;
+    font-family:'IBM Plex Mono', monospace;
+    font-size:.78rem;
+    letter-spacing:.02em;
+    color:var(--text-dim);
+    border-right:1px solid var(--line-soft);
+  }
+  .tick b{color:var(--text); font-weight:600;}
+  .tick .pos{color:var(--up);}
+  .tick .neg{color:var(--down);}
+
+  /* ---------- Header ---------- */
+  header{
+    display:flex;
+    justify-content:space-between;
+    align-items:center;
+    padding:1.1rem clamp(1.2rem,4vw,3rem);
+    border-bottom:1px solid var(--line);
+  }
+  .wordmark{
+    font-family:'Fraunces', serif;
+    font-style:italic;
+    font-weight:500;
+    font-size:1.5rem;
+    letter-spacing:.01em;
+  }
+  .wordmark span{color:var(--gold);}
+  header nav{font-size:.85rem; color:var(--text-dim);}
+
+  /* ---------- Hero ---------- */
+  .hero{
+    padding:clamp(2rem,5vw,3.5rem) clamp(1.2rem,4vw,3rem) 1.5rem;
+    border-bottom:1px solid var(--line);
+  }
+  .hero h1{
+    font-family:'Fraunces', serif;
+    font-weight:500;
+    font-size:clamp(2.1rem,4.4vw,3.6rem);
+    line-height:1.05;
+    margin:0 0 .9rem;
+    max-width:16ch;
+  }
+  .hero p.lede{
+    max-width:56ch;
+    color:var(--text-dim);
+    font-size:1.02rem;
+    margin:0 0 1.8rem;
+  }
+  .hero-chart-wrap{
+    border:1px solid var(--line);
+    background:var(--panel);
+    border-radius:var(--radius);
+    padding:1rem 1rem .6rem;
+  }
+  .hero-chart-head{
+    display:flex; justify-content:space-between; align-items:baseline;
+    margin-bottom:.4rem; flex-wrap:wrap; gap:.5rem;
+  }
+  .hero-chart-head .label{font-size:.8rem; color:var(--text-faint);}
+  .hero-chart-head .price{font-family:'IBM Plex Mono',monospace; font-size:1.3rem;}
+  .hero-chart-canvas{height:220px;}
+
+  /* ---------- Main layout ---------- */
+  .layout{
+    display:grid;
+    grid-template-columns:300px 1fr;
+  }
+  @media (max-width:860px){
+    .layout{grid-template-columns:1fr;}
+    .rail{border-right:none !important; border-bottom:1px solid var(--line);}
+  }
+
+  .rail{
+    border-right:1px solid var(--line);
+    padding:1.6rem clamp(1rem,3vw,1.8rem) 2rem;
+  }
+  .rail h2, .stage h2{
+    font-family:'Fraunces', serif;
+    font-weight:500;
+    font-size:1.05rem;
+    margin:0 0 1rem;
+  }
+  .field{margin-bottom:1.35rem;}
+  .field label{
+    display:flex; justify-content:space-between;
+    font-size:.82rem; color:var(--text-dim); margin-bottom:.4rem;
+  }
+  .field label .val{color:var(--text); font-family:'IBM Plex Mono',monospace;}
+
+  input[type=range]{
+    -webkit-appearance:none;
+    width:100%; height:2px;
+    background:var(--line);
+    border-radius:2px;
+    accent-color:var(--gold);
+  }
+  input[type=range]::-webkit-slider-thumb{
+    -webkit-appearance:none;
+    width:13px; height:13px; border-radius:50%;
+    background:var(--gold);
+    border:2px solid #0D1117;
+    cursor:pointer; margin-top:-6px;
+  }
+
+  .segmented{
+    display:flex; border:1px solid var(--line); border-radius:var(--radius); overflow:hidden;
+  }
+  .segmented button{
+    flex:1; background:transparent; border:none; color:var(--text-dim);
+    font-family:'IBM Plex Mono',monospace; font-size:.82rem; padding:.55rem 0;
+    cursor:pointer; border-right:1px solid var(--line);
+  }
+  .segmented button:last-child{border-right:none;}
+  .segmented button.active{background:var(--gold); color:#15100A; font-weight:600;}
+
+  .filebtn{
+    display:block; width:100%; text-align:center;
+    padding:.55rem 0; border:1px dashed var(--line);
+    border-radius:var(--radius); color:var(--text-dim);
+    font-size:.8rem; cursor:pointer; background:transparent;
+  }
+  .filebtn:hover{border-color:var(--gold-dim); color:var(--text);}
+  input[type=file]{display:none;}
+  .filename{font-size:.74rem; color:var(--text-faint); margin-top:.4rem; word-break:break-all;}
+
+  .btn-primary{
+    width:100%; padding:.75rem 0; margin-top:.4rem;
+    background:var(--gold); color:#15100A; border:none; border-radius:var(--radius);
+    font-family:'IBM Plex Mono',monospace; font-weight:600; font-size:.85rem;
+    letter-spacing:.02em; cursor:pointer;
+  }
+  .btn-primary:disabled{background:var(--line); color:var(--text-faint); cursor:not-allowed;}
+  .btn-secondary{
+    width:100%; padding:.65rem 0; margin-top:.6rem;
+    background:transparent; color:var(--text-dim); border:1px solid var(--line);
+    border-radius:var(--radius); font-family:'IBM Plex Mono',monospace; font-size:.8rem;
+    cursor:pointer;
+  }
+  .btn-secondary:hover{border-color:var(--gold-dim); color:var(--text);}
+  .btn-secondary:disabled{opacity:.4; cursor:not-allowed;}
+
+  .status{
+    margin-top:1rem; font-size:.78rem; color:var(--text-faint);
+    min-height:2.4em; line-height:1.4;
+  }
+  .status.err{color:var(--down);}
+  .status.ok{color:var(--up);}
+
+  /* ---------- Stage ---------- */
+  .stage{padding:1.6rem clamp(1rem,3vw,1.8rem) 2rem;}
+  .panel{
+    border:1px solid var(--line); background:var(--panel);
+    border-radius:var(--radius); padding:1.1rem 1.2rem 1.3rem; margin-bottom:1.3rem;
+  }
+  .panel .chart-canvas{height:210px;}
+  .panel-head{display:flex; justify-content:space-between; align-items:baseline; margin-bottom:.7rem; flex-wrap:wrap; gap:.4rem;}
+  .panel-head .sub{font-size:.78rem; color:var(--text-faint);}
+
+  .metrics-grid{
+    display:grid; grid-template-columns:repeat(auto-fit,minmax(130px,1fr));
+    gap:1px; background:var(--line); border:1px solid var(--line); border-radius:var(--radius); overflow:hidden;
+  }
+  .metric{background:var(--panel-2); padding:.9rem 1rem;}
+  .metric .num{font-family:'IBM Plex Mono',monospace; font-size:1.55rem; color:var(--gold);}
+  .metric .lbl{font-size:.76rem; color:var(--text-dim); margin-top:.15rem;}
+
+  .legend-row{display:flex; gap:1.2rem; font-size:.78rem; color:var(--text-dim); flex-wrap:wrap;}
+  .legend-row .dot{display:inline-block; width:9px; height:9px; border-radius:50%; margin-right:.4em;}
+
+  .empty-note{
+    color:var(--text-faint); font-size:.85rem; padding:2.2rem 0; text-align:center;
+    border:1px dashed var(--line); border-radius:var(--radius);
+  }
+
+  footer{
+    padding:1.4rem clamp(1.2rem,4vw,3rem) 2rem; border-top:1px solid var(--line);
+    color:var(--text-faint); font-size:.78rem; max-width:70ch;
+  }
+</style>
+</head>
+<body>
+
+<div class="ticker-wrap">
+  <div class="ticker-track mono" id="tickerTrack"></div>
+</div>
+
+<header>
+  <div class="wordmark">look<span>back</span></div>
+  <nav>lstm &amp; gru sequence models, trained in your browser</nav>
+</header>
+
+<section class="hero">
+  <h1>Teach a network to read the tape.</h1>
+  <p class="lede">Lookback trains a recurrent neural network — your choice of LSTM or GRU — directly in this page, on real price history or a synthetic walk. No server, no API key: TensorFlow.js does the work on your device, then projects the series forward.</p>
+
+  <div class="hero-chart-wrap">
+    <div class="hero-chart-head">
+      <span class="label" id="seriesLabel">SAMPLE · SYNTHETIC WALK · 500 SESSIONS</span>
+      <span class="price mono" id="seriesPrice">—</span>
+    </div>
+    <div class="hero-chart-canvas"><canvas id="priceChart"></canvas></div>
+  </div>
+</section>
+
+<div class="layout">
+
+  <aside class="rail">
+    <h2>Data</h2>
+    <div class="field">
+      <div class="segmented" id="dataSourceToggle">
+        <button class="active" data-src="sample">Sample</button>
+        <button data-src="upload">Upload CSV</button>
+      </div>
+    </div>
+    <div class="field" id="uploadField" style="display:none;">
+      <label class="filebtn" for="csvInput">Choose a .csv (Date, Close)</label>
+      <input type="file" id="csvInput" accept=".csv">
+      <div class="filename" id="fileName">No file selected</div>
+    </div>
+
+    <h2 style="margin-top:1.8rem;">Model</h2>
+    <div class="field">
+      <div class="segmented" id="modelToggle">
+        <button class="active" data-model="lstm">LSTM</button>
+        <button data-model="gru">GRU</button>
+      </div>
+    </div>
+
+    <div class="field">
+      <label>Lookback window <span class="val" id="lookbackVal">20</span></label>
+      <input type="range" id="lookback" min="5" max="60" value="20" step="1">
+    </div>
+    <div class="field">
+      <label>Hidden units <span class="val" id="unitsVal">32</span></label>
+      <input type="range" id="units" min="8" max="128" value="32" step="8">
+    </div>
+    <div class="field">
+      <label>Epochs <span class="val" id="epochsVal">30</span></label>
+      <input type="range" id="epochs" min="5" max="120" value="30" step="5">
+    </div>
+    <div class="field">
+      <label>Train / test split <span class="val" id="splitVal">80 / 20</span></label>
+      <input type="range" id="split" min="60" max="90" value="80" step="5">
+    </div>
+
+    <button class="btn-primary" id="trainBtn">Train model</button>
+    <div class="status" id="statusLine">Load sample data or upload a CSV, then train.</div>
+
+    <div id="forecastControls" style="display:none; margin-top:1.4rem; border-top:1px solid var(--line); padding-top:1.2rem;">
+      <h2 style="margin-bottom:1rem;">Forecast</h2>
+      <div class="field">
+        <label>Sessions ahead <span class="val" id="stepsVal">10</span></label>
+        <input type="range" id="steps" min="3" max="30" value="10" step="1">
+      </div>
+      <button class="btn-secondary" id="forecastBtn">Project forward</button>
+    </div>
+  </aside>
+
+  <main class="stage">
+
+    <div class="panel" id="trainPanel" style="display:none;">
+      <div class="panel-head">
+        <h2>Training</h2>
+        <span class="sub" id="trainSub">—</span>
+      </div>
+      <div class="chart-canvas"><canvas id="lossChart"></canvas></div>
+    </div>
+
+    <div class="panel" id="resultsPanel" style="display:none;">
+      <div class="panel-head">
+        <h2>Held-out predictions</h2>
+        <span class="sub">Test window, never seen during training</span>
+      </div>
+      <div class="chart-canvas"><canvas id="resultChart"></canvas></div>
+      <div class="legend-row" style="margin:.8rem 0 1.1rem;">
+        <span><span class="dot" style="background:#8B95A6"></span>Actual</span>
+        <span><span class="dot" style="background:#C9A227"></span>Predicted</span>
+      </div>
+      <div class="metrics-grid" id="metricsGrid"></div>
+    </div>
+
+    <div class="panel" id="forecastPanel" style="display:none;">
+      <div class="panel-head">
+        <h2>Forward projection</h2>
+        <span class="sub" id="forecastSub">Recursive, one step feeding the next</span>
+      </div>
+      <div class="chart-canvas"><canvas id="forecastChart"></canvas></div>
+    </div>
+
+    <div class="empty-note" id="emptyNote">Training results and a forward projection will appear here once you train a model.</div>
+
+  </main>
+</div>
+
+<footer>
+  Lookback is an educational tool. Recurrent models trained on a few hundred closing prices, with no fundamental or macro data, do not reliably predict markets. Nothing here is investment advice.
+</footer>
+
+<script>
+(function(){
+  "use strict";
+
+  // ---------------- State ----------------
+  let rawSeries = [];          // [{date, close}]
+  let normMin = 0, normMax = 1;
+  let model = null;
+  let lookback = 20, units = 32, epochs = 30, splitPct = 80, modelType = "lstm";
+  let lastTestActual = [], lastTestPred = [];
+  let trainedOK = false;
+
+  const els = {
+    lookback: document.getElementById("lookback"),
+    lookbackVal: document.getElementById("lookbackVal"),
+    units: document.getElementById("units"),
+    unitsVal: document.getElementById("unitsVal"),
+    epochs: document.getElementById("epochs"),
+    epochsVal: document.getElementById("epochsVal"),
+    split: document.getElementById("split"),
+    splitVal: document.getElementById("splitVal"),
+    steps: document.getElementById("steps"),
+    stepsVal: document.getElementById("stepsVal"),
+    trainBtn: document.getElementById("trainBtn"),
+    forecastBtn: document.getElementById("forecastBtn"),
+    forecastControls: document.getElementById("forecastControls"),
+    statusLine: document.getElementById("statusLine"),
+    csvInput: document.getElementById("csvInput"),
+    fileName: document.getElementById("fileName"),
+    uploadField: document.getElementById("uploadField"),
+    seriesLabel: document.getElementById("seriesLabel"),
+    seriesPrice: document.getElementById("seriesPrice"),
+    trainPanel: document.getElementById("trainPanel"),
+    trainSub: document.getElementById("trainSub"),
+    resultsPanel: document.getElementById("resultsPanel"),
+    forecastPanel: document.getElementById("forecastPanel"),
+    forecastSub: document.getElementById("forecastSub"),
+    emptyNote: document.getElementById("emptyNote"),
+    metricsGrid: document.getElementById("metricsGrid"),
+    tickerTrack: document.getElementById("tickerTrack"),
+  };
+
+  // ---------------- Ticker ----------------
+  function setTicker(items){
+    // items: [{sym, val, delta}]
+    const html = items.map(it => {
+      const cls = it.delta > 0 ? "pos" : (it.delta < 0 ? "neg" : "");
+      const arrow = it.delta > 0 ? "▲" : (it.delta < 0 ? "▼" : "·");
+      return `<span class="tick"><b>${it.sym}</b><span>${it.val}</span><span class="${cls}">${arrow} ${it.deltaLabel||""}</span></span>`;
+    }).join("");
+    els.tickerTrack.innerHTML = html + html; // duplicate for seamless scroll
+  }
+
+  // ---------------- Data generation ----------------
+  function generateSyntheticSeries(n){
+    let price = 100 + Math.random()*50;
+    const drift = 0.0003;
+    const vol = 0.014;
+    const out = [];
+    const start = new Date();
+    start.setDate(start.getDate() - n);
+    for(let i=0;i<n;i++){
+      const shock = (Math.random()+Math.random()+Math.random()+Math.random()-2)/2; // approx normal
+      price = price * (1 + drift + vol*shock);
+      const d = new Date(start);
+      d.setDate(d.getDate()+i);
+      out.push({date:d, close: price});
+    }
+    return out;
+  }
+
+  function parseCSV(text){
+    const lines = text.split(/\r?\n/).filter(l => l.trim().length>0);
+    if(lines.length < 2) return [];
+    const header = lines[0].split(",").map(h => h.trim().toLowerCase());
+    let dateIdx = header.findIndex(h => h === "date");
+    let closeIdx = header.findIndex(h => h === "adj close");
+    if(closeIdx === -1) closeIdx = header.findIndex(h => h === "close");
+    if(dateIdx === -1) dateIdx = 0;
+    if(closeIdx === -1) closeIdx = header.length > 1 ? 1 : 0;
+    const out = [];
+    for(let i=1;i<lines.length;i++){
+      const cols = lines[i].split(",");
+      if(cols.length <= closeIdx) continue;
+      const close = parseFloat(cols[closeIdx]);
+      if(!isFinite(close)) continue;
+      const dRaw = cols[dateIdx];
+      const d = new Date(dRaw);
+      out.push({date: isNaN(d.getTime()) ? new Date(2000,0,1+i) : d, close});
+    }
+    return out;
+  }
+
+  // ---------------- Charts ----------------
+  const chartInstances = {};
+  function baseOptions(extra){
+    return Object.assign({
+      responsive:true, maintainAspectRatio:false,
+      animation:{duration:250},
+      interaction:{mode:'index', intersect:false},
+      plugins:{ legend:{display:false}, tooltip:{
+        backgroundColor:'#182130', borderColor:'#2A3441', borderWidth:1,
+        titleColor:'#E7E3D8', bodyColor:'#E7E3D8', titleFont:{family:'IBM Plex Mono'}, bodyFont:{family:'IBM Plex Mono'}
+      }},
+      scales:{
+        x:{ ticks:{color:'#576172', maxTicksLimit:8, font:{family:'IBM Plex Mono', size:10}}, grid:{color:'#1F2836'} },
+        y:{ ticks:{color:'#576172', font:{family:'IBM Plex Mono', size:10}}, grid:{color:'#1F2836'} }
+      }
+    }, extra||{});
+  }
+
+  function renderPriceChart(){
+    const ctx = document.getElementById("priceChart");
+    const labels = rawSeries.map(p => p.date.toLocaleDateString(undefined,{month:'short', day:'numeric'}));
+    const data = rawSeries.map(p => p.close);
+    if(chartInstances.price) chartInstances.price.destroy();
+    chartInstances.price = new Chart(ctx, {
+      type:'line',
+      data:{ labels, datasets:[{ data, borderColor:'#C9A227', borderWidth:1.6, pointRadius:0, tension:0.15, fill:false }]},
+      options: baseOptions()
+    });
+    const last = rawSeries[rawSeries.length-1].close;
+    const first = rawSeries[0].close;
+    const chg = ((last-first)/first*100);
+    els.seriesPrice.textContent = last.toFixed(2) + "  " + (chg>=0? "+":"") + chg.toFixed(1) + "%";
+    els.seriesPrice.style.color = chg>=0 ? "#4FA97E" : "#C15C4A";
+    setTicker([
+      {sym:"SERIES", val:last.toFixed(2), delta:chg, deltaLabel:chg.toFixed(1)+"%"},
+      {sym:"SESSIONS", val:rawSeries.length, delta:0},
+      {sym:"MODEL", val: modelType.toUpperCase(), delta:0},
+      {sym:"STATUS", val: trainedOK ? "TRAINED" : "IDLE", delta:0},
+    ]);
+  }
+
+  function renderLossChart(lossHistory){
+    const ctx = document.getElementById("lossChart");
+    if(chartInstances.loss) chartInstances.loss.destroy();
+    chartInstances.loss = new Chart(ctx, {
+      type:'line',
+      data:{ labels: lossHistory.map((_,i)=>i+1), datasets:[{ data:lossHistory, borderColor:'#C9A227', borderWidth:1.6, pointRadius:0, tension:0.2 }]},
+      options: baseOptions({ scales:{ x:{ title:{display:true,text:'epoch',color:'#576172',font:{family:'IBM Plex Mono',size:10}}, ticks:{color:'#576172',font:{family:'IBM Plex Mono',size:10}}, grid:{color:'#1F2836'}}, y:{ ticks:{color:'#576172',font:{family:'IBM Plex Mono',size:10}}, grid:{color:'#1F2836'} } } })
+    });
+  }
+
+  function renderResultChart(dates, actual, pred){
+    const ctx = document.getElementById("resultChart");
+    if(chartInstances.result) chartInstances.result.destroy();
+    const labels = dates.map(d => d.toLocaleDateString(undefined,{month:'short', day:'numeric'}));
+    chartInstances.result = new Chart(ctx, {
+      type:'line',
+      data:{ labels, datasets:[
+        { data:actual, borderColor:'#8B95A6', borderWidth:1.4, pointRadius:0, tension:0.15 },
+        { data:pred, borderColor:'#C9A227', borderWidth:1.6, pointRadius:0, tension:0.15 }
+      ]},
+      options: baseOptions()
+    });
+  }
+
+  function renderForecastChart(historyDates, historyClose, futureDates, futureClose){
+    const ctx = document.getElementById("forecastChart");
+    if(chartInstances.forecast) chartInstances.forecast.destroy();
+    const tailN = Math.min(60, historyClose.length);
+    const histTail = historyClose.slice(-tailN);
+    const histDatesTail = historyDates.slice(-tailN);
+    const labels = histDatesTail.concat(futureDates).map(d => d.toLocaleDateString(undefined,{month:'short', day:'numeric'}));
+    const actualSeries = histTail.concat(new Array(futureClose.length).fill(null));
+    const bridge = histTail[histTail.length-1];
+    const forecastSeries = new Array(histTail.length-1).fill(null).concat([bridge]).concat(futureClose);
+    chartInstances.forecast = new Chart(ctx, {
+      type:'line',
+      data:{ labels, datasets:[
+        { data:actualSeries, borderColor:'#8B95A6', borderWidth:1.4, pointRadius:0, tension:0.15 },
+        { data:forecastSeries, borderColor:'#C9A227', borderWidth:1.8, borderDash:[5,4], pointRadius:0, tension:0.15 }
+      ]},
+      options: baseOptions()
+    });
+  }
+
+  // ---------------- ML pipeline ----------------
+  function normalize(arr){
+    normMin = Math.min(...arr); normMax = Math.max(...arr);
+    const range = (normMax - normMin) || 1;
+    return arr.map(v => (v-normMin)/range);
+  }
+  function denorm(v){ return v*(normMax-normMin)+normMin; }
+
+  function makeSequences(norm, lb){
+    const X=[], y=[];
+    for(let i=0; i<=norm.length-lb-1; i++){
+      X.push(norm.slice(i, i+lb));
+      y.push(norm[i+lb]);
+    }
+    return {X,y};
+  }
+
+  function buildModel(type, lb, u){
+    const m = tf.sequential();
+    const layer = (type === "gru") ? tf.layers.gru({units:u, inputShape:[lb,1]}) : tf.layers.lstm({units:u, inputShape:[lb,1]});
+    m.add(layer);
+    m.add(tf.layers.dense({units:1}));
+    m.compile({ optimizer: tf.train.adam(0.012), loss:'meanSquaredError' });
+    return m;
+  }
+
+  function setStatus(msg, kind){
+    els.statusLine.textContent = msg;
+    els.statusLine.className = "status" + (kind ? " "+kind : "");
+  }
+
+  async function trainAndEvaluate(){
+    if(rawSeries.length < lookback + 20){
+      setStatus(`Need at least ${lookback+20} data points for a lookback of ${lookback}. This series has ${rawSeries.length}.`, "err");
+      return;
+    }
+    els.trainBtn.disabled = true;
+    els.forecastBtn.disabled = true;
+    setStatus("Preparing sequences…");
+    els.emptyNote.style.display = "none";
+    els.trainPanel.style.display = "block";
+    els.resultsPanel.style.display = "none";
+    els.forecastPanel.style.display = "none";
+    trainedOK = false;
+
+    await tf.nextFrame();
+
+    const closes = rawSeries.map(p => p.close);
+    const norm = normalize(closes);
+    const {X, y} = makeSequences(norm, lookback);
+
+    const splitIdx = Math.floor(X.length * (splitPct/100));
+    const Xtrain = X.slice(0, splitIdx), ytrain = y.slice(0, splitIdx);
+    const Xtest = X.slice(splitIdx), ytest = y.slice(splitIdx);
+
+    if(Xtrain.length < 10 || Xtest.length < 5){
+      setStatus("Not enough data for this split / lookback combination. Try a shorter lookback or a larger dataset.", "err");
+      els.trainBtn.disabled = false;
+      return;
+    }
+
+    const xTrainT = tf.tensor3d(Xtrain.map(seq => seq.map(v=>[v])));
+    const yTrainT = tf.tensor2d(ytrain.map(v=>[v]));
+    const xTestT = tf.tensor3d(Xtest.map(seq => seq.map(v=>[v])));
+
+    if(model) model.dispose();
+    model = buildModel(modelType, lookback, units);
+
+    const lossHistory = [];
+    renderLossChart(lossHistory);
+    const t0 = performance.now();
+
+    await model.fit(xTrainT, yTrainT, {
+      epochs, batchSize:16, shuffle:true,
+      callbacks:{
+        onEpochEnd: async (epoch, logs) => {
+          lossHistory.push(logs.loss);
+          renderLossChart(lossHistory);
+          els.trainSub.textContent = `epoch ${epoch+1} / ${epochs} · loss ${logs.loss.toFixed(5)}`;
+          setStatus(`Training… epoch ${epoch+1} of ${epochs}`);
+          await tf.nextFrame();
+        }
+      }
+    });
+
+    const predT = model.predict(xTestT);
+    const predArr = Array.from(await predT.data());
+    predT.dispose();
+    xTrainT.dispose(); yTrainT.dispose(); xTestT.dispose();
+
+    const actualClose = ytest.map(denorm);
+    const predClose = predArr.map(denorm);
+    lastTestActual = actualClose; lastTestPred = predClose;
+
+    const testDates = rawSeries.slice(lookback + splitIdx + 1).map(p=>p.date).slice(0, actualClose.length);
+
+    renderResultChart(testDates, actualClose, predClose);
+
+    // metrics
+    const n = actualClose.length;
+    let se=0, ae=0, ape=0, dirHits=0;
+    for(let i=0;i<n;i++){
+      const err = actualClose[i]-predClose[i];
+      se += err*err; ae += Math.abs(err);
+      if(actualClose[i] !== 0) ape += Math.abs(err/actualClose[i]);
+      const prevActual = i===0 ? closes[closes.length - n - 1 + i] : actualClose[i-1];
+      const actualDir = Math.sign(actualClose[i]-prevActual);
+      const predDir = Math.sign(predClose[i]-prevActual);
+      if(actualDir === predDir) dirHits++;
+    }
+    const rmse = Math.sqrt(se/n), mae = ae/n, mape = (ape/n)*100, dirAcc = (dirHits/n)*100;
+
+    els.metricsGrid.innerHTML = `
+      <div class="metric"><div class="num">${rmse.toFixed(2)}</div><div class="lbl">RMSE</div></div>
+      <div class="metric"><div class="num">${mae.toFixed(2)}</div><div class="lbl">Mean abs. error</div></div>
+      <div class="metric"><div class="num">${mape.toFixed(1)}%</div><div class="lbl">Mean abs. % error</div></div>
+      <div class="metric"><div class="num">${dirAcc.toFixed(0)}%</div><div class="lbl">Directional accuracy</div></div>
+    `;
+
+    const secs = ((performance.now()-t0)/1000).toFixed(1);
+    setStatus(`Trained in ${secs}s on ${Xtrain.length} sequences, tested on ${Xtest.length}.`, "ok");
+    els.resultsPanel.style.display = "block";
+    els.trainBtn.disabled = false;
+    els.forecastBtn.disabled = false;
+    els.forecastControls.style.display = "block";
+    trainedOK = true;
+    renderPriceChart(); // refresh ticker with trained status + metrics
+    setTicker([
+      {sym: modelType.toUpperCase(), val:"RMSE "+rmse.toFixed(2), delta:0},
+      {sym:"DIR ACC", val:dirAcc.toFixed(0)+"%", delta: dirAcc>=50?1:-1, deltaLabel: dirAcc>=50 ? "beats coin flip" : "below coin flip"},
+      {sym:"EPOCHS", val:epochs, delta:0},
+      {sym:"WINDOW", val:lookback+"d", delta:0},
+    ]);
+  }
+
+  async function forecastForward(){
+    if(!model){ setStatus("Train a model first.", "err"); return; }
+    const steps = parseInt(els.steps.value, 10);
+    const closes = rawSeries.map(p => p.close);
+    const norm = normalize(closes); // note: recompute w/ same min/max as full series (matches training scale)
+    let window = norm.slice(-lookback);
+    const futureNorm = [];
+
+    for(let s=0; s<steps; s++){
+      const inputT = tf.tensor3d([window.map(v=>[v])]);
+      const outT = model.predict(inputT);
+      const val = (await outT.data())[0];
+      inputT.dispose(); outT.dispose();
+      futureNorm.push(val);
+      window = window.slice(1).concat([val]);
+    }
+    const futureClose = futureNorm.map(denorm);
+    const lastDate = rawSeries[rawSeries.length-1].date;
+    const futureDates = futureClose.map((_,i)=>{
+      const d = new Date(lastDate); d.setDate(d.getDate()+i+1); return d;
+    });
+
+    renderForecastChart(rawSeries.map(p=>p.date), closes, futureDates, futureClose);
+    els.forecastPanel.style.display = "block";
+    const startPrice = closes[closes.length-1], endPrice = futureClose[futureClose.length-1];
+    const chg = ((endPrice-startPrice)/startPrice*100);
+    els.forecastSub.textContent = `${steps} sessions ahead → ${endPrice.toFixed(2)} (${chg>=0?"+":""}${chg.toFixed(1)}%), recursive: each step feeds the next`;
+  }
+
+  // ---------------- Wiring ----------------
+  function loadSample(){
+    rawSeries = generateSyntheticSeries(500);
+    els.seriesLabel.textContent = "SAMPLE · SYNTHETIC WALK · 500 SESSIONS";
+    renderPriceChart();
+  }
+
+  document.getElementById("dataSourceToggle").addEventListener("click", (e)=>{
+    const btn = e.target.closest("button"); if(!btn) return;
+    [...e.currentTarget.children].forEach(b=>b.classList.remove("active"));
+    btn.classList.add("active");
+    const src = btn.dataset.src;
+    els.uploadField.style.display = src === "upload" ? "block" : "none";
+    if(src === "sample") loadSample();
+  });
+
+  document.getElementById("modelToggle").addEventListener("click", (e)=>{
+    const btn = e.target.closest("button"); if(!btn) return;
+    [...e.currentTarget.children].forEach(b=>b.classList.remove("active"));
+    btn.classList.add("active");
+    modelType = btn.dataset.model;
+  });
+
+  els.csvInput.addEventListener("change", (e)=>{
+    const file = e.target.files[0];
+    if(!file) return;
+    els.fileName.textContent = file.name;
+    const reader = new FileReader();
+    reader.onload = (ev) => {
+      const parsed = parseCSV(ev.target.result);
+      if(parsed.length < 30){
+        setStatus("Couldn't find enough valid rows in that CSV. Expecting columns like Date, Close.", "err");
+        return;
+      }
+      parsed.sort((a,b)=>a.date-b.date);
+      rawSeries = parsed;
+      els.seriesLabel.textContent = "UPLOADED · " + file.name.toUpperCase() + " · " + parsed.length + " ROWS";
+      renderPriceChart();
+      setStatus("Data loaded. Adjust parameters and train.", "ok");
+    };
+    reader.readAsText(file);
+  });
+
+  function bindRange(el, valEl, onSet, fmt){
+    el.addEventListener("input", ()=>{
+      const v = parseInt(el.value,10);
+      valEl.textContent = fmt ? fmt(v) : v;
+      onSet(v);
+    });
+  }
+  bindRange(els.lookback, els.lookbackVal, v=>lookback=v);
+  bindRange(els.units, els.unitsVal, v=>units=v);
+  bindRange(els.epochs, els.epochsVal, v=>epochs=v);
+  bindRange(els.split, els.splitVal, v=>splitPct=v, v=>`${v} / ${100-v}`);
+  bindRange(els.steps, els.stepsVal, ()=>{});
+
+  els.trainBtn.addEventListener("click", trainAndEvaluate);
+  els.forecastBtn.addEventListener("click", forecastForward);
+
+  // init
+  loadSample();
+})();
+</script>
+</body>
+</html>
