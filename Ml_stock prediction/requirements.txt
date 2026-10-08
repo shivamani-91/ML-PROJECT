@@ -1,0 +1,15 @@
+# AI Stock Price Predictor – LSTM & GRU
+# Python Requirements File
+
+flask>=3.0.0
+flask-cors>=4.0.0
+yfinance>=0.2.36
+pandas>=2.0.0
+numpy>=1.24.0
+scikit-learn>=1.3.0
+scipy>=1.10.0
+joblib>=1.3.0
+keras>=3.0.0
+torch>=2.0.0
+requests>=2.31.0
+pip-system-certs>=4.0

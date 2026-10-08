@@ -1,0 +1,765 @@
+<!DOCTYPE html>
+<html lang="en" data-theme="dark">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>AI Stock Price Predictor – LSTM & GRU</title>
+  <meta name="description" content="AI Stock Price Predictor using real TensorFlow/Keras LSTM and GRU deep learning models for financial time-series forecasting." />
+  
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800;900&display=swap" rel="stylesheet" />
+  
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.2/css/all.min.css" />
+  <link rel="stylesheet" href="styles.css" />
+  <script src="https://cdn.plot.ly/plotly-2.35.2.min.js"></script>
+</head>
+<body>
+  <div class="page-shell">
+    
+    <!-- Academic Disclaimer Banner -->
+    <div class="disclaimer-banner">
+      <i class="fa-solid fa-triangle-exclamation"></i>
+      <span><strong>Educational Project:</strong> This application is an educational machine-learning project. Predictions are based on historical data and should not be considered financial advice or guaranteed future prices.</span>
+    </div>
+
+    <!-- Navigation Header -->
+    <header class="topbar">
+      <nav class="nav container" aria-label="Main navigation">
+        <div class="brand-wrap">
+          <div class="brand-mark"><i class="fa-solid fa-chart-line"></i></div>
+          <div class="brand-text">
+            <span>AI Stock Predictor</span>
+            <small>LSTM &amp; GRU Deep Learning</small>
+          </div>
+        </div>
+
+        <button class="nav-toggle" id="navToggle" aria-label="Toggle navigation">
+          <span></span><span></span><span></span>
+        </button>
+
+        <div class="nav-links-wrap" id="navLinks">
+          <ul class="nav-links">
+            <li><a href="#dataset-section">Dataset</a></li>
+            <li><a href="#preprocessing-section">Preprocessing</a></li>
+            <li><a href="#training-section">Train Models</a></li>
+            <li><a href="#history-section">Training Loss</a></li>
+            <li><a href="#evaluation-section">Evaluation</a></li>
+            <li><a href="#chart-section">Actual vs Predicted</a></li>
+            <li><a href="#future-section">Future Forecast</a></li>
+            <li><a href="#pipeline-section">Pipeline</a></li>
+          </ul>
+          
+          <div style="display: flex; align-items: center; gap: 12px;">
+            <div id="backendStatusPill" class="status-pill" style="display: inline-flex; align-items: center; gap: 6px; font-size: 0.76rem; font-weight: 600; padding: 4px 10px; border-radius: 999px; background: rgba(42, 216, 154, 0.15); border: 1px solid rgba(42, 216, 154, 0.4); color: #2ad89a;">
+              <span class="pulse-dot" style="width: 7px; height: 7px;"></span>
+              <span id="backendStatusText">Connecting...</span>
+            </div>
+
+            <button class="theme-toggle" id="themeToggle" aria-label="Toggle theme">
+              <i class="fa-solid fa-moon"></i>
+            </button>
+          </div>
+        </div>
+      </nav>
+    </header>
+
+    <main>
+      <!-- Hero Banner -->
+      <section class="hero section" style="padding-top: 48px; padding-bottom: 32px;">
+        <div class="container hero-grid">
+          <div class="hero-copy">
+            <div class="eyebrow">
+              <span class="pulse-dot"></span>
+              B.Tech Machine Learning Project
+            </div>
+            <h1>AI Stock Price Predictor – LSTM &amp; GRU</h1>
+            <p>
+              An end-to-end deep learning system that ingests historical market datasets, preprocesses time-series data with MinMaxScaler, trains authentic LSTM and GRU neural networks, evaluates test performance (MSE, RMSE, MAE), and forecasts future stock trajectory.
+            </p>
+            <div class="hero-actions">
+              <a href="#training-section" class="primary-btn large-btn train-both-btn">
+                <i class="fa-solid fa-brain"></i> Train Both Models
+              </a>
+              <a href="#dataset-section" class="secondary-btn large-btn">
+                <i class="fa-solid fa-database"></i> Explore Dataset
+              </a>
+            </div>
+            <div class="hero-metrics">
+              <div>
+                <strong id="heroTicker">AAPL</strong>
+                <span>Active Ticker</span>
+              </div>
+              <div>
+                <strong id="heroSeqLen">60 Days</strong>
+                <span>Sequence Window</span>
+              </div>
+              <div>
+                <strong id="heroBestModel">LSTM / GRU</strong>
+                <span>Best Architecture</span>
+              </div>
+            </div>
+          </div>
+
+          <div class="hero-visual glass-card">
+            <div class="chart-header">
+              <div>
+                <span class="muted-label" id="heroStockHeader">AAPL Overview</span>
+                <h3 id="heroCurrentPrice">$0.00</h3>
+              </div>
+              <div id="heroTrendPill" class="trend-pill positive">+0.00%</div>
+            </div>
+            <div class="mini-chart" id="heroChart"></div>
+            <div class="mini-legend">
+              <span><i class="dot blue"></i>Actual Close</span>
+              <span><i class="dot green"></i>Predicted Close</span>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <!-- Dashboard KPIs Section -->
+      <section class="section" style="padding-top: 10px; padding-bottom: 40px;">
+        <div class="container">
+          <div class="kpi-grid">
+            <article class="kpi-card glass-card">
+              <span class="kpi-label">Current Close Price</span>
+              <strong id="currentPrice">$0.00</strong>
+              <small id="currentTrend">+0.00%</small>
+            </article>
+            <article class="kpi-card glass-card">
+              <span class="kpi-label">Open Price</span>
+              <strong id="openingPrice">$0.00</strong>
+              <small>Latest Session</small>
+            </article>
+            <article class="kpi-card glass-card">
+              <span class="kpi-label">Session High</span>
+              <strong id="highPrice">$0.00</strong>
+              <small>24h Range</small>
+            </article>
+            <article class="kpi-card glass-card">
+              <span class="kpi-label">Session Low</span>
+              <strong id="lowPrice">$0.00</strong>
+              <small>24h Range</small>
+            </article>
+            <article class="kpi-card glass-card">
+              <span class="kpi-label">Trading Volume</span>
+              <strong id="volumeValue">0</strong>
+              <small>Shares Traded</small>
+            </article>
+            <article class="kpi-card glass-card">
+              <span class="kpi-label">Daily Price Shift</span>
+              <strong id="dailyChange">$0.00</strong>
+              <small id="dailyChangePercent">0.00%</small>
+            </article>
+          </div>
+        </div>
+      </section>
+
+      <!-- 1. DATASET & INGESTION SECTION -->
+      <section id="dataset-section" class="section">
+        <div class="container">
+          <div class="section-heading row-heading">
+            <div>
+              <span class="eyebrow subtle">Data Ingestion</span>
+              <h2>Historical Stock Market Dataset</h2>
+              <p>Download live market data via Yahoo Finance (`yfinance`) or upload your own CSV dataset.</p>
+            </div>
+            <div id="demoBadgeContainer">
+              <!-- Rendered dynamically if DEMO mode is active -->
+            </div>
+          </div>
+
+          <!-- Dataset Controls -->
+          <div class="dashboard-controls glass-card" style="margin-bottom: 24px;">
+            <div class="field-group" style="min-width: 220px;">
+              <label for="tickerInput">Stock Ticker</label>
+              <div class="input-row">
+                <input id="tickerInput" type="text" value="AAPL" maxlength="10" placeholder="e.g. AAPL, NVDA" />
+                <button class="primary-btn small-btn" id="downloadDataBtn">
+                  <i class="fa-solid fa-cloud-arrow-down"></i> Download
+                </button>
+              </div>
+              <div class="ticker-chips">
+                <span class="ticker-chip active" data-symbol="AAPL">AAPL</span>
+                <span class="ticker-chip" data-symbol="MSFT">MSFT</span>
+                <span class="ticker-chip" data-symbol="GOOGL">GOOGL</span>
+                <span class="ticker-chip" data-symbol="AMZN">AMZN</span>
+                <span class="ticker-chip" data-symbol="TSLA">TSLA</span>
+                <span class="ticker-chip" data-symbol="NVDA">NVDA</span>
+                <span class="ticker-chip" data-symbol="META">META</span>
+              </div>
+            </div>
+
+            <div class="field-group">
+              <label for="startDate">Start Date</label>
+              <input type="date" id="startDate" value="2022-01-01" />
+            </div>
+
+            <div class="field-group">
+              <label for="endDate">End Date</label>
+              <input type="date" id="endDate" value="2024-01-01" />
+            </div>
+
+            <div class="field-group" style="border-left: 1px solid var(--border); padding-left: 20px;">
+              <label>Upload Custom CSV</label>
+              <label class="ghost-btn" style="cursor: pointer; display: inline-flex; align-items: center; gap: 8px; margin-top: 4px;">
+                <i class="fa-solid fa-file-csv"></i> Upload CSV Dataset
+                <input type="file" id="csvFileInput" accept=".csv" style="display: none;" />
+              </label>
+              <small style="display: block; color: var(--muted); font-size: 0.72rem; margin-top: 4px;">Expected: Date,Open,High,Low,Close,Volume</small>
+            </div>
+          </div>
+
+          <!-- Statistical Summary of Dataset -->
+          <div class="analysis-grid" style="margin-bottom: 24px;">
+            <div class="mini-chart-card glass-card">
+              <span class="kpi-label">Total Rows</span>
+              <strong id="statRows" style="font-size: 1.4rem;">0</strong>
+              <small id="statDateRange" style="color: var(--muted);">Date Range: --</small>
+            </div>
+            <div class="mini-chart-card glass-card">
+              <span class="kpi-label">Average Close Price</span>
+              <strong id="statAvgClose" style="font-size: 1.4rem;">$0.00</strong>
+              <small style="color: var(--muted);">Mean historical value</small>
+            </div>
+            <div class="mini-chart-card glass-card">
+              <span class="kpi-label">Historical High / Low</span>
+              <strong id="statHighLow" style="font-size: 1.4rem;">$0 / $0</strong>
+              <small style="color: var(--muted);">Max &amp; Min Close</small>
+            </div>
+            <div class="mini-chart-card glass-card">
+              <span class="kpi-label">Missing Values</span>
+              <strong id="statMissing" style="font-size: 1.4rem; color: var(--success);">0</strong>
+              <small style="color: var(--muted);">Forward &amp; backward filled</small>
+            </div>
+          </div>
+
+          <!-- Dataset Table Preview -->
+          <div class="data-table-card glass-card">
+            <div class="table-toolbar">
+              <div class="table-controls">
+                <input type="text" id="tableSearch" placeholder="Search by date, price, volume..." />
+                <select id="sortField">
+                  <option value="date-desc">Date (Newest First)</option>
+                  <option value="date-asc">Date (Oldest First)</option>
+                  <option value="close-desc">Close (High to Low)</option>
+                  <option value="close-asc">Close (Low to High)</option>
+                  <option value="volume-desc">Volume (High to Low)</option>
+                </select>
+              </div>
+              <div class="table-pagination">
+                <button class="ghost-btn" id="prevPage"><i class="fa-solid fa-chevron-left"></i> Prev</button>
+                <span id="pageInfo">Page 1 / 1</span>
+                <button class="ghost-btn" id="nextPage">Next <i class="fa-solid fa-chevron-right"></i></button>
+              </div>
+            </div>
+
+            <div class="table-wrap">
+              <table>
+                <thead>
+                  <tr>
+                    <th>Date</th>
+                    <th>Open ($)</th>
+                    <th>High ($)</th>
+                    <th>Low ($)</th>
+                    <th>Close ($)</th>
+                    <th>Volume</th>
+                  </tr>
+                </thead>
+                <tbody id="stockTableBody">
+                  <tr><td colspan="6" style="text-align: center; color: var(--muted);">Loading dataset...</td></tr>
+                </tbody>
+              </table>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <!-- 2. DATA PREPROCESSING & SEQUENCE CREATION -->
+      <section id="preprocessing-section" class="section">
+        <div class="container">
+          <div class="section-heading">
+            <span class="eyebrow subtle">Data Preparation</span>
+            <h2>Data Preprocessing &amp; Sequence Engineering</h2>
+            <p>Clean missing values, sort by date, select target feature (Close), normalize with MinMaxScaler, and generate sliding window sequences.</p>
+          </div>
+
+          <div class="prediction-layout">
+            <div class="prediction-form glass-card">
+              <h3 style="margin-top: 0; margin-bottom: 16px; font-size: 1.1rem;">Sequence Settings</h3>
+              
+              <div class="field-group">
+                <label for="sequenceLengthSelect">Configurable Sequence Length</label>
+                <select id="sequenceLengthSelect">
+                  <option value="20">20 Days Window</option>
+                  <option value="30">30 Days Window</option>
+                  <option value="60" selected>60 Days Window (Default)</option>
+                  <option value="90">90 Days Window</option>
+                </select>
+                <small style="color: var(--muted); font-size: 0.75rem; margin-top: 4px; display: block;">
+                  Previous N trading days are used to forecast the next day's closing price.
+                </small>
+              </div>
+
+              <div class="field-group">
+                <label>Train / Test Split</label>
+                <input type="text" value="80% Training / 20% Testing (Chronological)" readonly style="background: rgba(255,255,255,0.04);" />
+                <small style="color: var(--muted); font-size: 0.75rem; margin-top: 4px; display: block;">
+                  Prevents lookahead bias by splitting strictly forward in time.
+                </small>
+              </div>
+
+              <button class="primary-btn" id="applyPreprocessBtn" style="width: 100%; margin-top: 10px;">
+                <i class="fa-solid fa-sliders"></i> Apply Preprocessing
+              </button>
+            </div>
+
+            <div class="prediction-panel glass-card">
+              <h3 style="margin-top: 0; margin-bottom: 16px; font-size: 1.1rem;">Preprocessing Pipeline Information</h3>
+              <div class="result-grid">
+                <div class="result-item">
+                  <span>Total Records</span>
+                  <strong id="prepTotalRecords">0</strong>
+                </div>
+                <div class="result-item">
+                  <span>Training Records (X_train)</span>
+                  <strong id="prepTrainRecords">0</strong>
+                </div>
+                <div class="result-item">
+                  <span>Testing Records (X_test)</span>
+                  <strong id="prepTestRecords">0</strong>
+                </div>
+                <div class="result-item">
+                  <span>Missing Values Handled</span>
+                  <strong id="prepMissing" style="color: var(--success);">0</strong>
+                </div>
+                <div class="result-item">
+                  <span>Target Feature</span>
+                  <strong id="prepTarget">Close Price</strong>
+                </div>
+                <div class="result-item">
+                  <span>Normalization</span>
+                  <strong id="prepNorm">MinMaxScaler (0, 1)</strong>
+                </div>
+              </div>
+
+              <div style="margin-top: 20px; padding: 14px; background: rgba(78, 165, 255, 0.05); border: 1px solid rgba(78, 165, 255, 0.15); border-radius: 10px; font-size: 0.82rem; color: var(--muted-strong);">
+                <i class="fa-solid fa-circle-info" style="color: var(--primary);"></i>
+                <strong>Data Leakage Prevention:</strong> The MinMaxScaler is fitted strictly on the Training set (80%) and then applied to transform the Testing set (20%), preserving rigorous academic experimental validity.
+              </div>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <!-- 3. MODEL TRAINING SECTION (LSTM & GRU) -->
+      <section id="training-section" class="section">
+        <div class="container">
+          <div class="section-heading">
+            <span class="eyebrow subtle">Deep Learning Models</span>
+            <h2>Train LSTM &amp; GRU Neural Networks</h2>
+            <p>Configure model hyperparameters and train real TensorFlow/Keras neural networks with live epoch loss feedback.</p>
+          </div>
+
+          <div class="dashboard-controls glass-card" style="margin-bottom: 20px;">
+            <div class="field-group">
+              <label for="unitsInput">Hidden Units</label>
+              <input type="number" id="unitsInput" value="50" min="16" max="256" step="16" />
+            </div>
+
+            <div class="field-group">
+              <label for="layersInput">Recurrent Layers</label>
+              <input type="number" id="layersInput" value="2" min="1" max="4" />
+            </div>
+
+            <div class="field-group">
+              <label for="dropoutInput">Dropout Rate</label>
+              <input type="number" id="dropoutInput" value="0.2" min="0.0" max="0.5" step="0.05" />
+            </div>
+
+            <div class="field-group">
+              <label for="epochsInput">Epochs</label>
+              <input type="number" id="epochsInput" value="15" min="2" max="100" />
+            </div>
+
+            <div class="field-group">
+              <label for="batchSizeInput">Batch Size</label>
+              <input type="number" id="batchSizeInput" value="32" min="8" max="128" step="8" />
+            </div>
+
+            <div class="field-group">
+              <label for="lrInput">Learning Rate</label>
+              <input type="number" id="lrInput" value="0.001" min="0.0001" max="0.05" step="0.0005" />
+            </div>
+          </div>
+
+          <!-- Training Action Buttons -->
+          <div style="display: flex; flex-wrap: wrap; gap: 16px; margin-bottom: 24px;">
+            <button class="primary-btn large-btn" id="trainLstmBtn" style="background: rgba(78, 165, 255, 0.2); border: 1px solid var(--primary);">
+              <i class="fa-solid fa-play"></i> TRAIN LSTM MODEL
+            </button>
+            <button class="primary-btn large-btn" id="trainGruBtn" style="background: rgba(139, 92, 246, 0.2); border: 1px solid var(--purple);">
+              <i class="fa-solid fa-play"></i> TRAIN GRU MODEL
+            </button>
+            <button class="primary-btn large-btn train-both-btn" id="trainBothBtn">
+              <i class="fa-solid fa-rocket"></i> TRAIN LSTM + GRU
+            </button>
+          </div>
+
+          <!-- Live Training HUD & Progress Bar -->
+          <div class="training-hud" id="trainingHud">
+            <div style="display: flex; align-items: center; justify-content: space-between; flex-wrap: wrap; gap: 10px;">
+              <div>
+                <span class="eyebrow subtle" id="trainingModelBadge">Status: Ready</span>
+                <h3 id="trainingStatusText" style="margin: 8px 0 0 0; font-size: 1.15rem;">Neural Network Engines Idle</h3>
+              </div>
+              <div id="trainingPercentBadge" style="font-size: 1.5rem; font-weight: 800; color: var(--primary);">0%</div>
+            </div>
+
+            <div class="progress-track">
+              <div class="progress-fill" id="trainingProgressBar"></div>
+            </div>
+
+            <div class="training-stats-row">
+              <div class="training-stat-box">
+                <span>Current Epoch</span>
+                <strong id="hudEpoch">0 / 15</strong>
+              </div>
+              <div class="training-stat-box">
+                <span>Training Loss (MSE)</span>
+                <strong id="hudLoss">--</strong>
+              </div>
+              <div class="training-stat-box">
+                <span>Validation Loss</span>
+                <strong id="hudValLoss">--</strong>
+              </div>
+              <div class="training-stat-box">
+                <span>Status</span>
+                <strong id="hudStatus" style="color: var(--primary-2);">Idle</strong>
+              </div>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <!-- 4. TRAINING HISTORY LOSS CURVES -->
+      <section id="history-section" class="section">
+        <div class="container">
+          <div class="section-heading">
+            <span class="eyebrow subtle">Convergence Diagnostics</span>
+            <h2>Training &amp; Validation Loss Curves</h2>
+            <p>Visual verification of epoch-by-epoch loss reduction demonstrating real neural network optimization.</p>
+          </div>
+
+          <div class="hero-grid" style="grid-template-columns: 1fr 1fr; gap: 24px;">
+            <div class="chart-card glass-card">
+              <div class="section-subtitle">
+                <h3>LSTM Training Loss Curve</h3>
+                <span class="status-pill blue">LSTM</span>
+              </div>
+              <div id="lstmLossChart" class="chart-area" style="height: 320px;"></div>
+            </div>
+
+            <div class="chart-card glass-card">
+              <div class="section-subtitle">
+                <h3>GRU Training Loss Curve</h3>
+                <span class="status-pill purple">GRU</span>
+              </div>
+              <div id="gruLossChart" class="chart-area" style="height: 320px;"></div>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <!-- 5. MODEL EVALUATION & COMPARISON -->
+      <section id="evaluation-section" class="section">
+        <div class="container">
+          <div class="section-heading">
+            <span class="eyebrow subtle">Benchmark &amp; Metrics</span>
+            <h2>Model Evaluation &amp; Comparison</h2>
+            <p>Evaluation on the 20% unseen test dataset using standard machine learning metrics from Scikit-Learn.</p>
+          </div>
+
+          <div class="hero-grid" style="grid-template-columns: 1.2fr 0.8fr; gap: 24px; align-items: start;">
+            <!-- Comparison Table -->
+            <div class="comparison-table glass-card">
+              <table style="width: 100%;">
+                <thead>
+                  <tr>
+                    <th>Metric</th>
+                    <th>LSTM</th>
+                    <th>GRU</th>
+                    <th>Difference</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  <tr>
+                    <td><strong>Mean Squared Error (MSE)</strong></td>
+                    <td id="tableMseLstm">--</td>
+                    <td id="tableMseGru">--</td>
+                    <td id="tableMseDiff">--</td>
+                  </tr>
+                  <tr>
+                    <td><strong>Root Mean Squared Error (RMSE)</strong></td>
+                    <td id="tableRmseLstm">--</td>
+                    <td id="tableRmseGru">--</td>
+                    <td id="tableRmseDiff">--</td>
+                  </tr>
+                  <tr>
+                    <td><strong>Mean Absolute Error (MAE)</strong></td>
+                    <td id="tableMaeLstm">--</td>
+                    <td id="tableMaeGru">--</td>
+                    <td id="tableMaeDiff">--</td>
+                  </tr>
+                  <tr>
+                    <td><strong>Mean Abs. Pct. Error (MAPE)</strong></td>
+                    <td id="tableMapeLstm">--</td>
+                    <td id="tableMapeGru">--</td>
+                    <td id="tableMapeDiff">--</td>
+                  </tr>
+                  <tr>
+                    <td><strong>Directional Trend Accuracy</strong></td>
+                    <td id="tableAccLstm">--</td>
+                    <td id="tableAccGru">--</td>
+                    <td id="tableAccDiff">--</td>
+                  </tr>
+                </tbody>
+              </table>
+            </div>
+
+            <!-- Best Model Spotlight Card -->
+            <div class="best-model-card glass-card" style="padding: 28px;">
+              <div class="best-badge" id="bestModelBadge">
+                <i class="fa-solid fa-trophy"></i> Best Performing Model
+              </div>
+              <h2 id="bestModelTitle" style="margin: 16px 0 8px 0; font-size: 1.8rem; color: var(--text);">Awaiting Training</h2>
+              <p id="bestModelExplanation" style="color: var(--muted); font-size: 0.92rem; line-height: 1.6;">
+                Click "TRAIN LSTM + GRU" to execute full model training, compute real test evaluation metrics, and automatically determine the champion model based on lowest RMSE.
+              </p>
+              
+              <div style="margin-top: 20px; border-top: 1px solid var(--border); padding-top: 16px;">
+                <span class="kpi-label">Why RMSE is the primary criterion:</span>
+                <p style="font-size: 0.8rem; color: var(--muted-strong); margin: 6px 0 0 0;">
+                  RMSE penalizes large forecast errors quadratically, ensuring institutional financial safety against sudden volatility spikes.
+                </p>
+              </div>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <!-- 6. ACTUAL VS PREDICTED PLOTLY CHART -->
+      <section id="chart-section" class="section">
+        <div class="container">
+          <div class="chart-card glass-card">
+            <div class="section-subtitle" style="flex-wrap: wrap; gap: 12px;">
+              <div>
+                <span class="eyebrow subtle">Visual Validation</span>
+                <h2 style="margin: 6px 0 0 0;">Actual vs Predicted Stock Prices</h2>
+              </div>
+              <div class="chart-switcher">
+                <button class="chart-mode active" id="chartViewBoth" data-view="both">Overlay (Actual + LSTM + GRU)</button>
+                <button class="chart-mode" id="chartViewLstm" data-view="lstm">Actual vs LSTM</button>
+                <button class="chart-mode" id="chartViewGru" data-view="gru">Actual vs GRU</button>
+              </div>
+            </div>
+            
+            <div id="actualVsPredictedChart" class="chart-area" style="min-height: 460px;"></div>
+            
+            <div style="display: flex; justify-content: space-between; align-items: center; margin-top: 14px; font-size: 0.82rem; color: var(--muted);">
+              <span><i class="fa-solid fa-circle-info"></i> Chart features: Drag to zoom, double-click to reset, hover to inspect dates and exact dollar predictions.</span>
+              <span id="chartPointsCount">0 test points</span>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <!-- 7. FUTURE STOCK PRICE PREDICTION -->
+      <section id="future-section" class="section">
+        <div class="container">
+          <div class="section-heading">
+            <span class="eyebrow subtle">Recursive Multi-Step Forecasting</span>
+            <h2>Future Stock Price Prediction</h2>
+            <p>Using the trained neural network to recursively project future prices beyond the historical dataset.</p>
+          </div>
+
+          <div class="prediction-layout" style="grid-template-columns: 0.8fr 1.2fr;">
+            <!-- Future Controls -->
+            <div class="prediction-form glass-card">
+              <h3 style="margin-top: 0; margin-bottom: 14px;">Forecast Parameters</h3>
+              
+              <div class="field-group">
+                <label for="futureDaysSelect">Forecast Horizon</label>
+                <select id="futureDaysSelect">
+                  <option value="1">Next 1 Day</option>
+                  <option value="5">Next 5 Days (1 Week)</option>
+                  <option value="7">Next 7 Days</option>
+                  <option value="30" selected>Next 30 Trading Days (1 Month)</option>
+                </select>
+              </div>
+
+              <div class="field-group">
+                <label for="futureModelSelect">Forecasting Engine</label>
+                <select id="futureModelSelect">
+                  <option value="lstm" selected>LSTM Model</option>
+                  <option value="gru">GRU Model</option>
+                </select>
+              </div>
+
+              <button class="primary-btn" id="generateFutureBtn" style="width: 100%; margin-top: 10px;">
+                <i class="fa-solid fa-wand-magic-sparkles"></i> Generate Future Forecast
+              </button>
+
+              <div style="margin-top: 24px;">
+                <h4 style="margin: 0 0 10px 0; font-size: 0.92rem;">Projected Values</h4>
+                <div class="future-table-wrap">
+                  <table style="width: 100%; font-size: 0.84rem;">
+                    <thead>
+                      <tr>
+                        <th>Date</th>
+                        <th>Predicted Close ($)</th>
+                      </tr>
+                    </thead>
+                    <tbody id="futureTableBody">
+                      <tr><td colspan="2" style="text-align: center; color: var(--muted);">Click Generate to forecast.</td></tr>
+                    </tbody>
+                  </table>
+                </div>
+              </div>
+            </div>
+
+            <!-- Future Trajectory Chart -->
+            <div class="chart-card glass-card">
+              <div class="section-subtitle">
+                <h3>Historical Trend + Future Projection</h3>
+                <span class="status-pill green">Recursive Roll</span>
+              </div>
+              <div id="futureTrajectoryChart" class="chart-area" style="min-height: 420px;"></div>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <!-- 8. MACHINE LEARNING PIPELINE DIAGRAM -->
+      <section id="pipeline-section" class="section">
+        <div class="container">
+          <div class="section-heading">
+            <span class="eyebrow subtle">Methodology &amp; Workflow</span>
+            <h2>Machine Learning Pipeline</h2>
+            <p>The structured end-to-end data processing, model training, and inference architecture.</p>
+          </div>
+
+          <div class="architecture-diagram glass-card">
+            <div class="arch-step"><i class="fa-solid fa-cloud-arrow-down"></i> Yahoo Finance / CSV Ingestion</div>
+            <div class="arch-arrow">↓</div>
+            <div class="arch-step"><i class="fa-solid fa-database"></i> Historical OHLCV Dataset</div>
+            <div class="arch-arrow">↓</div>
+            <div class="arch-step"><i class="fa-solid fa-broom"></i> Data Cleaning &amp; Imputation (ffill/bfill)</div>
+            <div class="arch-arrow">↓</div>
+            <div class="arch-step"><i class="fa-solid fa-arrows-split-up-and-left"></i> Target Feature Extraction (Close)</div>
+            <div class="arch-arrow">↓</div>
+            <div class="arch-step"><i class="fa-solid fa-compress"></i> MinMaxScaler Normalization [0, 1]</div>
+            <div class="arch-arrow">↓</div>
+            <div class="arch-step"><i class="fa-solid fa-layer-group"></i> Sliding-Window Sequences (N Days)</div>
+            <div class="arch-arrow">↓</div>
+            <div class="arch-step"><i class="fa-solid fa-table-columns"></i> Chronological Train / Test Split (80/20)</div>
+            <div class="arch-arrow">↓</div>
+            
+            <div style="display: flex; gap: 20px; justify-content: center; width: 100%; max-width: 600px;">
+              <div class="arch-step" style="flex: 1; border-color: var(--primary);">
+                <i class="fa-solid fa-brain"></i> LSTM Model (2 Layers + Dropout)
+              </div>
+              <div class="arch-step" style="flex: 1; border-color: var(--purple);">
+                <i class="fa-solid fa-microchip"></i> GRU Model (2 Layers + Dropout)
+              </div>
+            </div>
+
+            <div class="arch-arrow">↓</div>
+            <div class="arch-step"><i class="fa-solid fa-calculator"></i> Evaluation Metrics: MSE, RMSE, MAE, MAPE</div>
+            <div class="arch-arrow">↓</div>
+            <div class="arch-step"><i class="fa-solid fa-trophy"></i> Automated Model Comparison &amp; Selection</div>
+            <div class="arch-arrow">↓</div>
+            <div class="arch-step"><i class="fa-solid fa-chart-line"></i> Multi-Step Future Price Forecasting</div>
+          </div>
+        </div>
+      </section>
+
+      <!-- 9. ABOUT PROJECT & ACADEMIC VIVA INFO -->
+      <section class="section about-section">
+        <div class="container">
+          <div class="section-heading">
+            <span class="eyebrow subtle">Academic Information</span>
+            <h2>B.Tech Project Details &amp; Viva Reference</h2>
+          </div>
+
+          <div class="about-content glass-card">
+            <div class="about-meta">
+              <div class="meta-row"><span>Project Title</span><strong>AI Stock Price Predictor – LSTM &amp; GRU</strong></div>
+              <div class="meta-row"><span>Course</span><strong>Machine Learning / Deep Learning</strong></div>
+              <div class="meta-row"><span>Degree</span><strong>Bachelor of Technology – Computer Science &amp; Engineering</strong></div>
+              <div class="meta-row"><span>Academic Year</span><strong>2026–2027</strong></div>
+              <div class="meta-row"><span>Frameworks</span><strong>TensorFlow, Keras, PyTorch Backend, Scikit-Learn, Pandas, NumPy</strong></div>
+            </div>
+
+            <div class="project-details">
+              <div class="detail-block">
+                <h3>LSTM Architecture</h3>
+                <p>Long Short-Term Memory networks introduce three gates (Forget Gate, Input Gate, Output Gate) and an internal Cell State vector \(C_t\) that prevents vanishing gradients over extended trading intervals.</p>
+              </div>
+              <div class="detail-block">
+                <h3>GRU Architecture</h3>
+                <p>Gated Recurrent Units streamline recurrent computation by combining cell and hidden state using two gates: Update Gate and Reset Gate, training faster with fewer parameters.</p>
+              </div>
+              <div class="detail-block">
+                <h3>Evaluation Methodology</h3>
+                <p>Root Mean Squared Error (RMSE) serves as the primary benchmark because it penalizes extreme forecasting errors, crucial for algorithmic risk management.</p>
+              </div>
+              <div class="detail-block">
+                <h3>Recursive Forecasting</h3>
+                <p>Multi-step projections feed each predicted closing price back into the rolling feature window to simulate market continuity across 1, 5, 7, and 30-day horizons.</p>
+              </div>
+            </div>
+          </div>
+        </div>
+      </section>
+    </main>
+
+    <!-- Footer -->
+    <footer class="site-footer">
+      <div class="container footer-grid">
+        <div class="footer-brand">
+          <div class="brand-wrap">
+            <div class="brand-mark"><i class="fa-solid fa-chart-line"></i></div>
+            <div class="brand-text">
+              <span>StockAI Predictor</span>
+              <small>LSTM &amp; GRU Deep Learning</small>
+            </div>
+          </div>
+          <p>Complete B.Tech Machine Learning Financial Analytics &amp; Forecasting Project.</p>
+        </div>
+
+        <div class="footer-nav">
+          <a href="#dataset-section">Dataset</a>
+          <a href="#preprocessing-section">Preprocessing</a>
+          <a href="#training-section">Training</a>
+          <a href="#evaluation-section">Evaluation</a>
+          <a href="#future-section">Forecast</a>
+        </div>
+
+        <div class="footer-meta">
+          <p>Educational ML Project &bull; B.Tech CSE &bull; A.Y. 2026–27</p>
+        </div>
+      </div>
+    </footer>
+  </div>
+
+  <!-- Toast Notification Container -->
+  <div class="toast" id="appToast">
+    <i class="fa-solid fa-circle-check" id="toastIcon"></i>
+    <span id="toastMsg">Operation successful</span>
+  </div>
+
+  <script src="script.js"></script>
+</body>
+</html>
